@@ -13,13 +13,15 @@ import {
 } from '@mui/material';
 import { AddPhotoAlternate, Delete } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
-import type { RootState } from '../store/store';
+import { RootState } from '../store/store';
 import { useUploadImageMutation } from '../features/editor/editorApi';
 
 interface UploadedImage {
   id: string;
   filename: string;
   url: string;
+  width: number;
+  height: number;
 }
 
 interface ImageUploadProps {
@@ -58,22 +60,20 @@ export default function ImageUpload({ onImageSelect }: ImageUploadProps) {
         id: response.id,
         filename: response.original_filename,
         url: response.image_url,
+        width: response.width,
+        height: response.height,
       };
 
       setUploadedImages((prev) => [...prev, newImage]);
 
-      onImageSelect({
-        id: response.id,
-        url: response.image_url,
-        width: response.width,
-        height: response.height,
-      });
+      // DON'T auto-select - let user click to add
+      console.log('Image uploaded:', newImage.filename);
 
     } catch (err: any) {
       console.error('Image upload error:', err);
       setError(err?.data?.detail || 'Failed to upload image');
     }
-  }, [sessionId, sessionToken, uploadImage, onImageSelect]);
+  }, [sessionId, sessionToken, uploadImage]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -86,6 +86,16 @@ export default function ImageUpload({ onImageSelect }: ImageUploadProps) {
 
   const handleRemoveImage = (id: string) => {
     setUploadedImages((prev) => prev.filter((img) => img.id !== id));
+  };
+
+  const handleImageClick = (image: UploadedImage) => {
+    console.log('Image clicked:', image.filename);
+    onImageSelect({
+      id: image.id,
+      url: image.url,
+      width: image.width,
+      height: image.height,
+    });
   };
 
   return (
@@ -138,6 +148,9 @@ export default function ImageUpload({ onImageSelect }: ImageUploadProps) {
           <Typography variant="subtitle2" gutterBottom>
             Uploaded Images ({uploadedImages.length})
           </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+            Click an image to add it to the PDF
+          </Typography>
           <List dense>
             {uploadedImages.map((image) => (
               <ListItem
@@ -146,7 +159,10 @@ export default function ImageUpload({ onImageSelect }: ImageUploadProps) {
                   <IconButton
                     edge="end"
                     size="small"
-                    onClick={() => handleRemoveImage(image.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveImage(image.id);
+                    }}
                   >
                     <Delete fontSize="small" />
                   </IconButton>
@@ -159,22 +175,20 @@ export default function ImageUpload({ onImageSelect }: ImageUploadProps) {
                   cursor: 'pointer',
                   '&:hover': {
                     bgcolor: 'action.hover',
+                    borderColor: 'primary.main',
                   },
                 }}
-                onClick={() =>
-                  onImageSelect({
-                    id: image.id,
-                    url: image.url,
-                    width: 200,
-                    height: 200,
-                  })
-                }
+                onClick={() => handleImageClick(image)}
               >
                 <ListItemText
                   primary={image.filename}
+                  secondary={`${image.width} × ${image.height}px`}
                   primaryTypographyProps={{
                     variant: 'body2',
                     noWrap: true,
+                  }}
+                  secondaryTypographyProps={{
+                    variant: 'caption',
                   }}
                 />
               </ListItem>
