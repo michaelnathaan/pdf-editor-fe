@@ -182,7 +182,7 @@ export default function PDFCanvas({ pdfUrl, selectedImage }: PDFCanvasProps) {
       }
     ).then((img: fabric.FabricImage) => {
       console.log('Image loaded from URL');
-      
+
       if (!fabricCanvasRef.current) {
         console.log('Fabric canvas disposed while loading');
         return;
@@ -407,7 +407,14 @@ export default function PDFCanvas({ pdfUrl, selectedImage }: PDFCanvasProps) {
     >
       <Box ref={containerRef} sx={{ position: 'relative' }}>
         {/* PDF Canvas */}
-        <canvas ref={pdfCanvasRef} style={{ display: 'block' }} />
+        <canvas
+          ref={pdfCanvasRef}
+          style={{
+            display: 'block',
+            position: 'relative',
+            zIndex: 0,
+          }}
+        />
 
         {/* Fabric.js Canvas Overlay */}
         <canvas
@@ -417,6 +424,7 @@ export default function PDFCanvas({ pdfUrl, selectedImage }: PDFCanvasProps) {
             top: 0,
             left: 0,
             pointerEvents: 'auto',
+            zIndex: 1,
           }}
         />
       </Box>
