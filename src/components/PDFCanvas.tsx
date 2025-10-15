@@ -31,7 +31,6 @@ export default function PDFCanvas({ pdfUrl, selectedImage }: PDFCanvasProps) {
 
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
-  const fabricCanvasElementRef = useRef<HTMLCanvasElement>(null);
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
