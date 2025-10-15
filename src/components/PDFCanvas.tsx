@@ -28,140 +28,57 @@ export default function PDFCanvas({ pdfUrl, selectedImage }: PDFCanvasProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pageWidth, setPageWidth] = useState<number>(0);
+  const [pdfLoaded, setPdfLoaded] = useState(false);
 
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  console.log('PDFCanvas render - selectedImage:', selectedImage);
-  console.log('PDFCanvas render - fabricCanvasRef.current:', !!fabricCanvasRef.current);
-
-  // 1. Load PDF document
+  // 1) Load PDF document (sets ref and pdfLoaded)
   useEffect(() => {
+    let cancelled = false;
+
     const loadPDF = async () => {
       try {
-        console.log('Loading PDF from:', pdfUrl);
         setLoading(true);
         setError(null);
+        setPdfLoaded(false);
 
         const loadingTask = pdfjsLib.getDocument(pdfUrl);
         const pdf = await loadingTask.promise;
+        if (cancelled) {
+          pdf.destroy?.();
+          return;
+        }
         pdfDocRef.current = pdf;
-
-        console.log('PDF loaded successfully, pages:', pdf.numPages);
-        setLoading(false);
+        setPdfLoaded(true);
       } catch (err: any) {
         console.error('Error loading PDF:', err);
-        setError(err.message || 'Failed to load PDF');
+        setError(err?.message || 'Failed to load PDF');
+      } finally {
         setLoading(false);
       }
     };
 
-    if (pdfUrl) {
-      loadPDF();
-    }
+    if (pdfUrl) loadPDF();
 
     return () => {
+      cancelled = true;
       if (pdfDocRef.current) {
         pdfDocRef.current.destroy();
         pdfDocRef.current = null;
       }
+      setPdfLoaded(false);
     };
   }, [pdfUrl]);
 
-  // 2. Initialize Fabric.js canvas (after PDF canvas is rendered)
-  useEffect(() => {
-    // Wait for both PDF canvas to exist AND have dimensions
-    if (!pdfCanvasRef.current || pageWidth === 0) {
-      console.log('⏳ Waiting for PDF canvas to render before initializing Fabric');
-      console.log('  - pdfCanvasRef.current exists:', !!pdfCanvasRef.current);
-      console.log('  - pageWidth:', pageWidth);
-      return;
-    }
-
-    // Only initialize once
-    if (fabricCanvasRef.current) {
-      console.log('✅ Fabric already initialized');
-      return;
-    }
-
-    console.log('🎨 Initializing Fabric canvas');
-    console.log('  - Width:', pageWidth);
-    console.log('  - Height:', pdfCanvasRef.current.height);
-
-    const fabricCanvas = new fabric.Canvas('fabric-canvas', {
-      selection: true,
-      preserveObjectStacking: true,
-      width: pageWidth,
-      height: pdfCanvasRef.current.height,
-    });
-
-    fabricCanvasRef.current = fabricCanvas;
-    console.log('✅ Fabric canvas initialized with dimensions:', pageWidth, 'x', pdfCanvasRef.current.height);
-
-    // Log actual DOM positions
-    setTimeout(() => {
-      if (pdfCanvasRef.current && containerRef.current) {
-        const containerRect = containerRef.current.getBoundingClientRect();
-        const pdfRect = pdfCanvasRef.current.getBoundingClientRect();
-        const fabricElement = document.getElementById('fabric-canvas');
-        const fabricRect = fabricElement?.getBoundingClientRect();
-
-        console.log('📏 DOM Measurements:');
-        console.log('  Container:', {
-          top: containerRect.top,
-          left: containerRect.left,
-          width: containerRect.width,
-          height: containerRect.height,
-        });
-        console.log('  PDF Canvas:', {
-          top: pdfRect.top,
-          left: pdfRect.left,
-          width: pdfRect.width,
-          height: pdfRect.height,
-        });
-        console.log('  Fabric Canvas:', fabricRect ? {
-          top: fabricRect.top,
-          left: fabricRect.left,
-          width: fabricRect.width,
-          height: fabricRect.height,
-        } : 'NOT FOUND');
-
-        // Check if they overlap
-        if (pdfRect && fabricRect) {
-          const topDiff = Math.abs(pdfRect.top - fabricRect.top);
-          const leftDiff = Math.abs(pdfRect.left - fabricRect.left);
-          console.log('  ⚠️ Position Difference:');
-          console.log('    Top difference:', topDiff, 'px');
-          console.log('    Left difference:', leftDiff, 'px');
-
-          if (topDiff > 5 || leftDiff > 5) {
-            console.error('❌ CANVASES ARE NOT ALIGNED!');
-          } else {
-            console.log('✅ Canvases are aligned');
-          }
-        }
-      }
-    }, 100);
-
-    return () => {
-      console.log('🗑️ Disposing Fabric canvas');
-      fabricCanvas.dispose();
-      fabricCanvasRef.current = null;
-    };
-  }, [pageWidth]);
-
-  // 3. Render PDF page
+  // 2) Render PDF page whenever PDF is loaded, page changes, or zoom changes
   useEffect(() => {
     const renderPage = async () => {
-      if (!pdfDocRef.current || !pdfCanvasRef.current) {
-        console.log('⏳ Cannot render - missing refs');
-        return;
-      }
+      if (!pdfLoaded || !pdfDocRef.current || !pdfCanvasRef.current) return;
 
       try {
-        console.log(`📄 Rendering page ${currentPage + 1} with zoom ${zoom}`);
         const page = await pdfDocRef.current.getPage(currentPage + 1);
         const viewport = page.getViewport({ scale: zoom });
 
@@ -169,227 +86,244 @@ export default function PDFCanvas({ pdfUrl, selectedImage }: PDFCanvasProps) {
         const context = canvas.getContext('2d');
         if (!context) return;
 
+        // set canvas pixel size
         canvas.width = viewport.width;
         canvas.height = viewport.height;
 
-        console.log('📐 PDF canvas dimensions:', viewport.width, 'x', viewport.height);
+        // set pageWidth state for fabric init
         setPageWidth(viewport.width);
 
         const renderContext = {
           canvasContext: context,
-          viewport: viewport,
-          canvas: canvas,
+          viewport,
+          canvas,
         };
 
         await page.render(renderContext).promise;
-        console.log('✅ PDF page rendered');
 
-        // Resize Fabric canvas to match PDF
+        // sync Fabric dimensions if initialized
         if (fabricCanvasRef.current) {
-          fabricCanvasRef.current.setDimensions({
-            width: viewport.width,
-            height: viewport.height,
-          });
-          fabricCanvasRef.current.setZoom(1);
-          console.log('🔄 Fabric canvas resized to:', viewport.width, 'x', viewport.height);
+          fabricCanvasRef.current.setDimensions({ width: viewport.width, height: viewport.height });
+          const el = fabricCanvasRef.current.getElement();
+          if (el) {
+            el.width = viewport.width;
+            el.height = viewport.height;
+          }
+          fabricCanvasRef.current.requestRenderAll();
         }
       } catch (err) {
-        console.error('❌ Error rendering page:', err);
+        console.error('Error rendering PDF page:', err);
       }
     };
 
     renderPage();
-  }, [currentPage, zoom]);
+  }, [pdfLoaded, currentPage, zoom]);
 
-  // 4. Add selected image to canvas
+  // 3) Initialize Fabric.js canvas AFTER we know pageWidth (so the overlay sizes correctly)
   useEffect(() => {
-    console.log('🖼️ selectedImage effect triggered');
-    console.log('  - selectedImage:', selectedImage);
-    console.log('  - fabricCanvasRef.current exists:', !!fabricCanvasRef.current);
-    console.log('  - pageWidth:', pageWidth);
+    if (!pdfCanvasRef.current || pageWidth === 0) return;
+    if (fabricCanvasRef.current) return;
 
-    if (!selectedImage) {
-      console.log('  ℹ️ No selected image');
-      return;
-    }
+    const fabricEl = document.getElementById('fabric-canvas') as HTMLCanvasElement | null;
+    if (!fabricEl) return;
 
-    if (!fabricCanvasRef.current) {
-      console.log('  ⏳ Fabric canvas not ready yet');
-      return;
-    }
-
-    if (!sessionId || !sessionToken) {
-      console.log('  ⚠️ Missing session');
-      return;
-    }
-
-    console.log('🚀 Adding image to canvas...');
-
-    fabric.FabricImage.fromURL(
-      selectedImage.url,
-      {
-        crossOrigin: 'anonymous'
-      }
-    ).then((img: fabric.FabricImage) => {
-      console.log('✅ Image loaded from URL');
-
-      if (!fabricCanvasRef.current) {
-        console.log('  ⚠️ Fabric canvas disposed while loading');
-        return;
-      }
-
-      // Scale image to reasonable size
-      const maxWidth = pageWidth * 0.3;
-      const scale = maxWidth / (img.width || 1);
-
-      console.log('📏 Image sizing:');
-      console.log('  - Original size:', img.width, 'x', img.height);
-      console.log('  - Scaling factor:', scale);
-      console.log('  - Final size:', maxWidth, 'x', (img.height || 0) * scale);
-
-      img.scale(scale);
-      img.set({
-        left: 100,
-        top: 100,
-        cornerSize: 10,
-        transparentCorners: false,
-        borderColor: '#2196f3',
-        cornerColor: '#2196f3',
-      });
-
-      fabricCanvasRef.current.add(img);
-      fabricCanvasRef.current.setActiveObject(img);
-      fabricCanvasRef.current.renderAll();
-
-      console.log('✅ Image added to Fabric canvas');
-      console.log('  - Canvas object count:', fabricCanvasRef.current.getObjects().length);
-      console.log('  - Image position:', { left: img.left, top: img.top });
-      console.log('  - Image size:', {
-        width: (img.width || 0) * (img.scaleX || 1),
-        height: (img.height || 0) * (img.scaleY || 1)
-      });
-
-      // Save to Redux
-      const canvasImage: CanvasImage = {
-        id: `canvas-${Date.now()}`,
-        imageId: selectedImage.id,
-        page: currentPage,
-        x: img.left || 0,
-        y: img.top || 0,
-        width: (img.width || 0) * (img.scaleX || 1),
-        height: (img.height || 0) * (img.scaleY || 1),
-        rotation: img.angle || 0,
-        opacity: img.opacity || 1,
-        url: selectedImage.url,
-      };
-
-      dispatch(addImage(canvasImage));
-      console.log('💾 Image saved to Redux');
-
-      // Send operation to backend
-      addOperation({
-        sessionId,
-        sessionToken,
-        operationType: 'add_image',
-        operationData: {
-          page: currentPage,
-          image_id: selectedImage.id,
-          image_path: `/app/storage/temp/${sessionId}/${selectedImage.id}_image.png`,
-          position: {
-            x: canvasImage.x,
-            y: canvasImage.y,
-            width: canvasImage.width,
-            height: canvasImage.height,
-          },
-          rotation: canvasImage.rotation,
-          opacity: canvasImage.opacity,
-        },
-      });
-      console.log('📤 Operation sent to backend');
-    }).catch((err) => {
-      console.error('❌ Error loading image from URL:', err);
+    const fabricCanvas = new fabric.Canvas(fabricEl, {
+      selection: true,
+      preserveObjectStacking: true,
     });
-  }, [selectedImage]);
 
-  // 5. Render images on current page
+    // ensure canvas element size is synced
+    fabricCanvas.setDimensions({ width: pageWidth, height: pdfCanvasRef.current!.height });
+    const el = fabricCanvas.getElement();
+    if (el) {
+      el.width = pageWidth;
+      el.height = pdfCanvasRef.current!.height;
+    }
+
+    fabricCanvasRef.current = fabricCanvas;
+
+    return () => {
+      fabricCanvas.dispose();
+      fabricCanvasRef.current = null;
+    };
+  }, [pageWidth]);
+
+  // 4) Add selected image to Fabric canvas
   useEffect(() => {
-    if (!fabricCanvasRef.current) return;
+    if (!selectedImage || !fabricCanvasRef.current || !sessionId || !sessionToken) return;
 
-    console.log('🔄 Re-rendering images for page', currentPage);
-    const canvas = fabricCanvasRef.current;
-    canvas.clear();
-
-    const pageImages = images.filter((img) => img.page === currentPage);
-    console.log('  - Page images count:', pageImages.length);
-
-    pageImages.forEach((canvasImg) => {
-      fabric.FabricImage.fromURL(
-        canvasImg.url,
-        {
-          crossOrigin: 'anonymous'
-        }
-      ).then((img: fabric.FabricImage) => {
+    (async () => {
+      try {
+        const img = await (fabric as any).Image.fromURL(selectedImage.url, { crossOrigin: 'anonymous' });
         if (!fabricCanvasRef.current) return;
 
+        const canvas = fabricCanvasRef.current;
+        const maxWidth = pageWidth * 0.3 || 200;
+        const scale = maxWidth / (img.width || 1);
+
+        img.scale(scale);
         img.set({
-          left: canvasImg.x,
-          top: canvasImg.y,
-          scaleX: canvasImg.width / (img.width || 1),
-          scaleY: canvasImg.height / (img.height || 1),
-          angle: canvasImg.rotation,
-          opacity: canvasImg.opacity,
+          left: 100 + (img.width * scale) / 2,  // position center at 100,100 visually
+          top: 100 + (img.height * scale) / 2,
+          originX: 'center',
+          originY: 'center',
           cornerSize: 10,
           transparentCorners: false,
           borderColor: '#2196f3',
           cornerColor: '#2196f3',
         });
 
-        fabricCanvasRef.current?.add(img);
-        fabricCanvasRef.current?.renderAll();
-      });
-    });
-  }, [currentPage, images]);
 
-  // 6. Handle object modifications
+        canvas.add(img);
+        canvas.setActiveObject(img);
+        canvas.requestRenderAll();
+
+        const canvasImage: CanvasImage = {
+          id: `canvas-${Date.now()}`,
+          imageId: selectedImage.id,
+          page: currentPage,
+          x: img.left || 0,
+          y: img.top || 0,
+          width: (img.width || 0) * (img.scaleX || 1),
+          height: (img.height || 0) * (img.scaleY || 1),
+          rotation: img.angle || 0,
+          opacity: img.opacity || 1,
+          url: selectedImage.url,
+        };
+
+        dispatch(addImage(canvasImage));
+
+        // fire operation (no await so UI doesn't block)
+        addOperation({
+          sessionId,
+          sessionToken,
+          operationType: 'add_image',
+          operationData: {
+            page: currentPage,
+            image_id: selectedImage.id,
+            image_path: `/app/storage/temp/${sessionId}/${selectedImage.id}_image.png`,
+            position: {
+              x: canvasImage.x,
+              y: canvasImage.y,
+              width: canvasImage.width,
+              height: canvasImage.height,
+            },
+            rotation: canvasImage.rotation,
+            opacity: canvasImage.opacity,
+          },
+        });
+      } catch (err) {
+        console.error('Error loading image into fabric:', err);
+      }
+    })();
+  }, [selectedImage, pageWidth, sessionId, sessionToken, currentPage, addOperation, dispatch]);
+
+  // 5) Re-render stored images for the current page
   useEffect(() => {
     if (!fabricCanvasRef.current) return;
 
     const canvas = fabricCanvasRef.current;
+    canvas.clear();
+
+    const pageImages = images.filter((img) => img.page === currentPage);
+    if (pageImages.length === 0) {
+      canvas.requestRenderAll();
+      return;
+    }
+
+    (async () => {
+      for (const canvasImg of pageImages) {
+        try {
+          const img = await (fabric as any).Image.fromURL(canvasImg.url, { crossOrigin: 'anonymous' });
+          img.set({
+            left: canvasImg.x + (canvasImg.width / 2),
+            top: canvasImg.y + (canvasImg.height / 2),
+            originX: 'center',
+            originY: 'center',
+            scaleX: canvasImg.width / (img.width || 1),
+            scaleY: canvasImg.height / (img.height || 1),
+            angle: canvasImg.rotation,
+            opacity: canvasImg.opacity,
+            cornerSize: 10,
+            transparentCorners: false,
+            borderColor: '#2196f3',
+            cornerColor: '#2196f3',
+          });
+          canvas.add(img);
+        } catch (err) {
+          console.error('Error rendering stored image:', err);
+        }
+      }
+      canvas.requestRenderAll();
+    })();
+  }, [currentPage, images]);
+
+  // 6) Handle object modified (move/resize/rotate) — includes rotation in operation data
+  useEffect(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+
+    // debounce map so we can coalesce quick successive modifications per object
+    const debounceTimers = new Map<string, number>();
+
+    const getObjectSrc = (obj: any): string | undefined => {
+      // try recommended API, fallback to internal element src
+      try {
+        if (typeof obj.getSrc === 'function') return obj.getSrc();
+      } catch { }
+      return obj._originalElement?.src || obj._element?.src || undefined;
+    };
+
+    const round = (n: number, p = 2) => Math.round((n + Number.EPSILON) * Math.pow(10, p)) / Math.pow(10, p);
 
     const handleObjectModified = (e: any) => {
-      const obj = e.target as fabric.FabricImage;
+      const obj = e.target as fabric.Object;
       if (!obj || !sessionId || !sessionToken) return;
 
-      console.log('🖱️ Object modified:', {
-        left: obj.left,
-        top: obj.top,
-        width: (obj.width || 0) * (obj.scaleX || 1),
-        height: (obj.height || 0) * (obj.scaleY || 1),
-      });
+      // Find image by matching object URL (more reliable than matching x coordinates)
+      const src = getObjectSrc(obj);
+      if (!src) return;
 
       const canvasImg = images.find(
-        (img) => img.page === currentPage && Math.abs(img.x - (obj.left || 0)) < 5
+        (img) => img.page === currentPage && img.url === src
       );
+      if (!canvasImg) return;
 
-      if (canvasImg) {
-        const newX = obj.left || 0;
-        const newY = obj.top || 0;
-        const newWidth = (obj.width || 0) * (obj.scaleX || 1);
-        const newHeight = (obj.height || 0) * (obj.scaleY || 1);
+      // Capture new transformed values
+      const newX = (obj.left ?? 0) - ((obj.width ?? 0) * (obj.scaleX ?? 1)) / 2;
+      const newY = (obj.top ?? 0) - ((obj.height ?? 0) * (obj.scaleY ?? 1)) / 2;
+      const newWidth = ((obj.width ?? 0) * (obj.scaleX ?? 1)) as number;
+      const newHeight = ((obj.height ?? 0) * (obj.scaleY ?? 1)) as number;
+      const newRotation = (obj.angle ?? 0) as number;
 
+      // Capture old values from Redux (before modification)
+      const oldX = canvasImg.x;
+      const oldY = canvasImg.y;
+      const oldWidth = canvasImg.width;
+      const oldHeight = canvasImg.height;
+
+      // Debounce per-image so rapid drags / rotations don't flood the backend
+      const key = canvasImg.id;
+      if (debounceTimers.has(key)) {
+        window.clearTimeout(debounceTimers.get(key));
+      }
+
+      const timer = window.setTimeout(() => {
+        // Update Redux immediately
         dispatch(
           updateImage({
             id: canvasImg.id,
             updates: {
-              x: newX,
-              y: newY,
-              width: newWidth,
-              height: newHeight,
-              rotation: obj.angle || 0,
+              x: round(newX),
+              y: round(newY),
+              width: round(newWidth),
+              height: round(newHeight),
+              rotation: round(newRotation),
             },
           })
         );
 
+        // Send operation to backend (now including rotation)
         addOperation({
           sessionId,
           sessionToken,
@@ -398,41 +332,41 @@ export default function PDFCanvas({ pdfUrl, selectedImage }: PDFCanvasProps) {
             page: currentPage,
             image_id: canvasImg.imageId,
             old_position: {
-              x: canvasImg.x,
-              y: canvasImg.y,
-              width: canvasImg.width,
-              height: canvasImg.height,
+              x: round(oldX),
+              y: round(oldY),
+              width: round(oldWidth),
+              height: round(oldHeight),
             },
             new_position: {
-              x: newX,
-              y: newY,
-              width: newWidth,
-              height: newHeight,
+              x: round(newX),
+              y: round(newY),
+              width: round(newWidth),
+              height: round(newHeight),
             },
+            rotation: round(newRotation),
           },
         });
-      }
+
+        debounceTimers.delete(key);
+      }, 300); // 300ms debounce — change if needed
+
+      debounceTimers.set(key, timer);
     };
 
     canvas.on('object:modified', handleObjectModified);
 
     return () => {
+      // clear any pending timers
+      for (const t of debounceTimers.values()) clearTimeout(t);
       canvas.off('object:modified', handleObjectModified);
     };
   }, [images, currentPage, sessionId, sessionToken, dispatch, addOperation]);
 
+
+
   if (loading) {
     return (
-      <Paper
-        elevation={3}
-        sx={{
-          p: 2,
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: 600,
-        }}
-      >
+      <Paper elevation={3} sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 600 }}>
         <CircularProgress />
       </Paper>
     );
@@ -440,75 +374,36 @@ export default function PDFCanvas({ pdfUrl, selectedImage }: PDFCanvasProps) {
 
   if (error) {
     return (
-      <Paper
-        elevation={3}
-        sx={{
-          p: 2,
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: 600,
-        }}
-      >
+      <Paper elevation={3} sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 600 }}>
         <Typography color="error">{error}</Typography>
       </Paper>
     );
   }
 
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        p: 2,
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: 600,
-        bgcolor: '#f5f5f5',
-        overflow: 'auto',
-      }}
-    >
-      <Box
-        ref={containerRef}
-        sx={{
-          position: 'relative',
-          display: 'inline-block',
-          border: '5px solid yellow',
-          boxShadow: '0 0 10px yellow',
-        }}
-      >
-        {/* PDF Canvas - positioned absolutely at (0,0) */}
+    <Paper elevation={3} sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 600, bgcolor: '#f5f5f5', overflow: 'auto' }}>
+      <Box ref={containerRef} sx={{ position: 'relative', display: 'inline-block' }}>
+        {/* PDF canvas (background) */}
         <canvas
           ref={pdfCanvasRef}
           style={{
             position: 'absolute',
             top: 0,
             left: 0,
-            border: '3px solid red',
-            boxSizing: 'border-box',
             zIndex: 0,
           }}
         />
 
-        {/* Fabric.js Canvas Overlay - on top of PDF */}
+        {/* Fabric overlay (foreground) */}
         {pageWidth > 0 && (
           <canvas
             id="fabric-canvas"
             width={pageWidth}
             height={pdfCanvasRef.current?.height || 0}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              border: '3px solid blue',
-              boxSizing: 'border-box',
-              pointerEvents: 'auto',
-              zIndex: 1,
-            }}
+            style={{ position: 'absolute', top: 0, left: 0, zIndex: 1, pointerEvents: 'auto' }}
           />
         )}
       </Box>
-
     </Paper>
   );
 }
