@@ -16,7 +16,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 interface PDFCanvasProps {
   pdfUrl: string;
   selectedImage: { id: string; url: string; width: number; height: number } | null;
-  onImageAdded?: () => void; // NEW
+  onImageAdded?: () => void;
 }
 
 export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCanvasProps) {
@@ -36,7 +36,72 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // 1) Load PDF document (sets ref and pdfLoaded)
+  // 🔹 Hide default blue Fabric.js control dots and add custom icons
+  function setupCustomControls(object: fabric.Object) {
+    if (!object?.controls) return;
+
+    // Common style for all custom control points
+    const drawCustomCircle = (
+      ctx: CanvasRenderingContext2D,
+      left: number,
+      top: number,
+      style: string
+    ) => {
+      ctx.save();
+      ctx.fillStyle = style;
+      ctx.beginPath();
+      ctx.arc(left, top, 6, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    // Helper for icon-based rotation
+    const drawRotateIcon = (
+      ctx: CanvasRenderingContext2D,
+      left: number,
+      top: number
+    ) => {
+      ctx.save();
+      ctx.translate(left, top);
+      ctx.beginPath();
+      ctx.strokeStyle = '#2196f3';
+      ctx.lineWidth = 2;
+      ctx.arc(0, 0, 7, 0.3, 2.6 * Math.PI);
+      ctx.moveTo(6, -3);
+      ctx.lineTo(9, 0);
+      ctx.lineTo(6, 3);
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    // Apply uniform custom styles to all corner controls
+    const controls = object.controls;
+    Object.keys(controls).forEach((key) => {
+      const ctrl = controls[key];
+      if (!ctrl) return;
+      ctrl.render = (ctx, left, top) => {
+        if (key === 'mtr') {
+          drawRotateIcon(ctx, left, top + 1); // rotation control
+        } else {
+          drawCustomCircle(ctx, left, top, '#2196f3'); // red circle for resize
+        }
+      };
+    });
+
+    // Optional: customize corner size and no borders
+    object.set({
+      cornerColor: 'transparent',
+      borderColor: 'transparent',
+      transparentCorners: true,
+      borderOpacityWhenMoving: 0,
+      cornerSize: 12,
+    });
+  }
+
+  // 1) Load PDF document
   useEffect(() => {
     let cancelled = false;
 
@@ -74,7 +139,7 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
     };
   }, [pdfUrl]);
 
-  // 2) Render PDF page whenever PDF is loaded, page changes, or zoom changes
+  // 2) Render PDF page
   useEffect(() => {
     const renderPage = async () => {
       if (!pdfLoaded || !pdfDocRef.current || !pdfCanvasRef.current) return;
@@ -87,29 +152,18 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
         const context = canvas.getContext('2d');
         if (!context) return;
 
-        // set canvas pixel size
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-
-        // set pageWidth state for fabric init
         setPageWidth(viewport.width);
 
-        const renderContext = {
-          canvasContext: context,
-          viewport,
-          canvas,
-        };
-
+        const renderContext = { canvasContext: context, viewport, canvas };
         await page.render(renderContext).promise;
 
-        // sync Fabric dimensions if initialized
         if (fabricCanvasRef.current) {
-          fabricCanvasRef.current.setDimensions({ width: viewport.width, height: viewport.height });
-          const el = fabricCanvasRef.current.getElement();
-          if (el) {
-            el.width = viewport.width;
-            el.height = viewport.height;
-          }
+          fabricCanvasRef.current.setDimensions({
+            width: viewport.width,
+            height: viewport.height,
+          });
           fabricCanvasRef.current.requestRenderAll();
         }
       } catch (err) {
@@ -120,7 +174,7 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
     renderPage();
   }, [pdfLoaded, currentPage, zoom]);
 
-  // 3) Initialize Fabric.js canvas AFTER we know pageWidth (so the overlay sizes correctly)
+  // 3) Initialize Fabric.js
   useEffect(() => {
     if (!pdfCanvasRef.current || pageWidth === 0) return;
     if (fabricCanvasRef.current) return;
@@ -133,13 +187,10 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
       preserveObjectStacking: true,
     });
 
-    // ensure canvas element size is synced
-    fabricCanvas.setDimensions({ width: pageWidth, height: pdfCanvasRef.current!.height });
-    const el = fabricCanvas.getElement();
-    if (el) {
-      el.width = pageWidth;
-      el.height = pdfCanvasRef.current!.height;
-    }
+    fabricCanvas.setDimensions({
+      width: pageWidth,
+      height: pdfCanvasRef.current!.height,
+    });
 
     fabricCanvasRef.current = fabricCanvas;
 
@@ -149,7 +200,7 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
     };
   }, [pageWidth]);
 
-  // 4) Add selected image to Fabric canvas
+  // 4) Add selected image
   useEffect(() => {
     if (!selectedImage || !fabricCanvasRef.current || !sessionId || !sessionToken) return;
 
@@ -164,15 +215,14 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
 
         img.scale(scale);
         img.set({
-          left: 100 + (img.width * scale) / 2,  // position center at 100,100 visually
+          left: 100 + (img.width * scale) / 2,
           top: 100 + (img.height * scale) / 2,
           originX: 'center',
           originY: 'center',
           cornerSize: 10,
-          transparentCorners: false,
-          borderColor: '#2196f3',
-          cornerColor: '#2196f3',
         });
+
+        setupCustomControls(img); // 🔹 Apply custom dots
 
         (img as any).imageId = selectedImage.id;
         (img as any).canvasImageId = `canvas-${Date.now()}`;
@@ -196,7 +246,6 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
 
         dispatch(addImage(canvasImage));
 
-        // fire operation (no await so UI doesn't block)
         addOperation({
           sessionId,
           sessionToken,
@@ -215,16 +264,15 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
             opacity: canvasImage.opacity,
           },
         });
-        if (onImageAdded) {
-          onImageAdded(); // Clear selection in parent
-        }
+
+        if (onImageAdded) onImageAdded();
       } catch (err) {
         console.error('Error loading image into fabric:', err);
       }
     })();
   }, [selectedImage, pageWidth, sessionId, sessionToken, currentPage, addOperation, dispatch]);
 
-  // 5) Re-render stored images for the current page
+  // 5) Re-render stored images
   useEffect(() => {
     if (!fabricCanvasRef.current) return;
 
@@ -244,19 +292,16 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
           (img as any).imageId = canvasImg.imageId;
           (img as any).canvasImageId = canvasImg.id;
           img.set({
-            left: canvasImg.x + (canvasImg.width / 2),
-            top: canvasImg.y + (canvasImg.height / 2),
+            left: canvasImg.x + canvasImg.width / 2,
+            top: canvasImg.y + canvasImg.height / 2,
             originX: 'center',
             originY: 'center',
             scaleX: canvasImg.width / (img.width || 1),
             scaleY: canvasImg.height / (img.height || 1),
             angle: canvasImg.rotation,
             opacity: canvasImg.opacity,
-            cornerSize: 10,
-            transparentCorners: false,
-            borderColor: '#2196f3',
-            cornerColor: '#2196f3',
           });
+          setupCustomControls(img);
           canvas.add(img);
         } catch (err) {
           console.error('Error rendering stored image:', err);
@@ -266,16 +311,14 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
     })();
   }, [currentPage, images]);
 
-  // 6) Handle object modified (move/resize/rotate) — includes rotation in operation data
+  // 6) Handle modifications (move/resize)
   useEffect(() => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
 
-    // debounce map so we can coalesce quick successive modifications per object
     const debounceTimers = new Map<string, number>();
 
     const getObjectSrc = (obj: any): string | undefined => {
-      // try recommended API, fallback to internal element src
       try {
         if (typeof obj.getSrc === 'function') return obj.getSrc();
       } catch { }
@@ -288,36 +331,24 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
       const obj = e.target as fabric.Object;
       if (!obj || !sessionId || !sessionToken) return;
 
-      // Find image by matching object URL (more reliable than matching x coordinates)
       const src = getObjectSrc(obj);
       if (!src) return;
 
-      const canvasImg = images.find(
-        (img) => img.page === currentPage && img.url === src
-      );
+      const canvasImg = images.find((img) => img.page === currentPage && img.url === src);
       if (!canvasImg) return;
 
-      // Capture new transformed values
       const newX = (obj.left ?? 0) - ((obj.width ?? 0) * (obj.scaleX ?? 1)) / 2;
       const newY = (obj.top ?? 0) - ((obj.height ?? 0) * (obj.scaleY ?? 1)) / 2;
       const newWidth = ((obj.width ?? 0) * (obj.scaleX ?? 1)) as number;
       const newHeight = ((obj.height ?? 0) * (obj.scaleY ?? 1)) as number;
       const newRotation = (obj.angle ?? 0) as number;
 
-      // Capture old values from Redux (before modification)
-      const oldX = canvasImg.x;
-      const oldY = canvasImg.y;
-      const oldWidth = canvasImg.width;
-      const oldHeight = canvasImg.height;
-
-      // Debounce per-image so rapid drags / rotations don't flood the backend
       const key = canvasImg.id;
       if (debounceTimers.has(key)) {
         window.clearTimeout(debounceTimers.get(key));
       }
 
       const timer = window.setTimeout(() => {
-        // Update Redux immediately
         dispatch(
           updateImage({
             id: canvasImg.id,
@@ -331,7 +362,6 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
           })
         );
 
-        // Send operation to backend (now including rotation)
         addOperation({
           sessionId,
           sessionToken,
@@ -340,10 +370,10 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
             page: currentPage,
             image_id: canvasImg.imageId,
             old_position: {
-              x: round(oldX),
-              y: round(oldY),
-              width: round(oldWidth),
-              height: round(oldHeight),
+              x: round(canvasImg.x),
+              y: round(canvasImg.y),
+              width: round(canvasImg.width),
+              height: round(canvasImg.height),
             },
             new_position: {
               x: round(newX),
@@ -356,7 +386,7 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
         });
 
         debounceTimers.delete(key);
-      }, 300); // 300ms debounce — change if needed
+      }, 300);
 
       debounceTimers.set(key, timer);
     };
@@ -364,13 +394,12 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
     canvas.on('object:modified', handleObjectModified);
 
     return () => {
-      // clear any pending timers
       for (const t of debounceTimers.values()) clearTimeout(t);
       canvas.off('object:modified', handleObjectModified);
     };
   }, [images, currentPage, sessionId, sessionToken, dispatch, addOperation]);
 
-  // In PDFCanvas.tsx, add this effect for DELETE key:
+  // 7) Handle delete key
   useEffect(() => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
@@ -380,21 +409,17 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
         const activeObject = canvas.getActiveObject();
         if (!activeObject) return;
 
-        // Find the canvas image by matching the fabric object
         const canvasImgId = (activeObject as any).canvasImageId;
         if (!canvasImgId) return;
 
-        const canvasImg = images.find(img => img.id === canvasImgId);
+        const canvasImg = images.find((img) => img.id === canvasImgId);
         if (!canvasImg) return;
 
-        // Remove from canvas
         canvas.remove(activeObject);
         canvas.requestRenderAll();
 
-        // Remove from Redux
-        dispatch(removeImage(canvasImg.id)); // You'll need to add this action
+        dispatch(removeImage(canvasImg.id));
 
-        // Add delete operation to backend
         if (sessionId && sessionToken) {
           addOperation({
             sessionId,
@@ -436,20 +461,23 @@ export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCa
   }
 
   return (
-    <Paper elevation={3} sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 600, bgcolor: '#f5f5f5', overflow: 'auto' }}>
+    <Paper
+      elevation={3}
+      sx={{
+        p: 2,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: 600,
+        bgcolor: '#f5f5f5',
+        overflow: 'auto',
+      }}
+    >
       <Box ref={containerRef} sx={{ position: 'relative', display: 'inline-block' }}>
-        {/* PDF canvas (background) */}
         <canvas
           ref={pdfCanvasRef}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            zIndex: 0,
-          }}
+          style={{ position: 'absolute', top: 0, left: 0, zIndex: 0 }}
         />
-
-        {/* Fabric overlay (foreground) */}
         {pageWidth > 0 && (
           <canvas
             id="fabric-canvas"
