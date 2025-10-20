@@ -4,7 +4,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import * as fabric from 'fabric';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store/store';
-import { addImage, updateImage } from '../features/editor/editorSlice';
+import { addImage, removeImage, updateImage } from '../features/editor/editorSlice';
 import { useAddOperationMutation } from '../features/editor/editorApi';
 import { CanvasImage } from '../types';
 
@@ -16,9 +16,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 interface PDFCanvasProps {
   pdfUrl: string;
   selectedImage: { id: string; url: string; width: number; height: number } | null;
+  onImageAdded?: () => void; // NEW
 }
 
-export default function PDFCanvas({ pdfUrl, selectedImage }: PDFCanvasProps) {
+export default function PDFCanvas({ pdfUrl, selectedImage, onImageAdded }: PDFCanvasProps) {
   const dispatch = useDispatch();
   const { currentPage, zoom, images, sessionId, sessionToken } = useSelector(
     (state: RootState) => state.editor
@@ -173,6 +174,8 @@ export default function PDFCanvas({ pdfUrl, selectedImage }: PDFCanvasProps) {
           cornerColor: '#2196f3',
         });
 
+        (img as any).imageId = selectedImage.id;
+        (img as any).canvasImageId = `canvas-${Date.now()}`;
 
         canvas.add(img);
         canvas.setActiveObject(img);
@@ -212,6 +215,9 @@ export default function PDFCanvas({ pdfUrl, selectedImage }: PDFCanvasProps) {
             opacity: canvasImage.opacity,
           },
         });
+        if (onImageAdded) {
+          onImageAdded(); // Clear selection in parent
+        }
       } catch (err) {
         console.error('Error loading image into fabric:', err);
       }
@@ -235,6 +241,8 @@ export default function PDFCanvas({ pdfUrl, selectedImage }: PDFCanvasProps) {
       for (const canvasImg of pageImages) {
         try {
           const img = await (fabric as any).Image.fromURL(canvasImg.url, { crossOrigin: 'anonymous' });
+          (img as any).imageId = canvasImg.imageId;
+          (img as any).canvasImageId = canvasImg.id;
           img.set({
             left: canvasImg.x + (canvasImg.width / 2),
             top: canvasImg.y + (canvasImg.height / 2),
@@ -362,7 +370,54 @@ export default function PDFCanvas({ pdfUrl, selectedImage }: PDFCanvasProps) {
     };
   }, [images, currentPage, sessionId, sessionToken, dispatch, addOperation]);
 
+  // In PDFCanvas.tsx, add this effect for DELETE key:
+  useEffect(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const activeObject = canvas.getActiveObject();
+        if (!activeObject) return;
+
+        // Find the canvas image by matching the fabric object
+        const canvasImgId = (activeObject as any).canvasImageId;
+        if (!canvasImgId) return;
+
+        const canvasImg = images.find(img => img.id === canvasImgId);
+        if (!canvasImg) return;
+
+        // Remove from canvas
+        canvas.remove(activeObject);
+        canvas.requestRenderAll();
+
+        // Remove from Redux
+        dispatch(removeImage(canvasImg.id)); // You'll need to add this action
+
+        // Add delete operation to backend
+        if (sessionId && sessionToken) {
+          addOperation({
+            sessionId,
+            sessionToken,
+            operationType: 'delete_image',
+            operationData: {
+              page: currentPage,
+              image_id: canvasImg.imageId,
+              position: {
+                x: canvasImg.x,
+                y: canvasImg.y,
+                width: canvasImg.width,
+                height: canvasImg.height,
+              },
+            },
+          });
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [images, currentPage, sessionId, sessionToken, dispatch, addOperation]);
 
   if (loading) {
     return (

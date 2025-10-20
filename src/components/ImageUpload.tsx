@@ -38,7 +38,7 @@ export default function ImageUpload({ onImageSelect }: ImageUploadProps) {
     if (acceptedFiles.length === 0 || !sessionId || !sessionToken) return;
 
     const file = acceptedFiles[0];
-    
+
     if (file.size > 10 * 1024 * 1024) {
       setError('Image size must be less than 10MB');
       return;
@@ -65,6 +65,12 @@ export default function ImageUpload({ onImageSelect }: ImageUploadProps) {
       };
 
       setUploadedImages((prev) => [...prev, newImage]);
+      onImageSelect({
+        id: newImage.id,
+        url: newImage.url,
+        width: newImage.width,
+        height: newImage.height,
+      });
 
       // DON'T auto-select - let user click to add
       console.log('Image uploaded:', newImage.filename);
@@ -86,16 +92,6 @@ export default function ImageUpload({ onImageSelect }: ImageUploadProps) {
 
   const handleRemoveImage = (id: string) => {
     setUploadedImages((prev) => prev.filter((img) => img.id !== id));
-  };
-
-  const handleImageClick = (image: UploadedImage) => {
-    console.log('Image clicked:', image.filename);
-    onImageSelect({
-      id: image.id,
-      url: image.url,
-      width: image.width,
-      height: image.height,
-    });
   };
 
   return (
@@ -121,7 +117,7 @@ export default function ImageUpload({ onImageSelect }: ImageUploadProps) {
         }}
       >
         <input {...getInputProps()} />
-        
+
         {isLoading ? (
           <CircularProgress size={40} />
         ) : (
@@ -146,27 +142,24 @@ export default function ImageUpload({ onImageSelect }: ImageUploadProps) {
       {uploadedImages.length > 0 && (
         <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
           <Typography variant="subtitle2" gutterBottom>
-            Uploaded Images ({uploadedImages.length})
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-            Click an image to add it to the PDF
+            Uploaded Image History ({uploadedImages.length})
           </Typography>
           <List dense>
             {uploadedImages.map((image) => (
               <ListItem
                 key={image.id}
-                secondaryAction={
-                  <IconButton
-                    edge="end"
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRemoveImage(image.id);
-                    }}
-                  >
-                    <Delete fontSize="small" />
-                  </IconButton>
-                }
+                // secondaryAction={
+                //   <IconButton
+                //     edge="end"
+                //     size="small"
+                //     onClick={(e) => {
+                //       e.stopPropagation();
+                //       handleRemoveImage(image.id);
+                //     }}
+                //   >
+                //     <Delete fontSize="small" />
+                //   </IconButton>
+                // }
                 sx={{
                   border: 1,
                   borderColor: 'divider',
@@ -178,7 +171,7 @@ export default function ImageUpload({ onImageSelect }: ImageUploadProps) {
                     borderColor: 'primary.main',
                   },
                 }}
-                onClick={() => handleImageClick(image)}
+                // onClick={() => handleImageClick(image)}
               >
                 <ListItemText
                   primary={image.filename}

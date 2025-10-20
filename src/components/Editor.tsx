@@ -3,7 +3,6 @@ import { Box, Grid, Typography } from '@mui/material';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store/store';
 import Toolbar from './Toolbar';
-import PageNavigator from './PageNavigator';
 import ImageUpload from './ImageUpload';
 import PDFCanvas from './PDFCanvas';
 import { useLazyDownloadOriginalPDFQuery } from '../features/editor/editorApi';
@@ -18,8 +17,8 @@ export default function Editor() {
     width: number;
     height: number;
   } | null>(null);
-  const [undoStack, setUndoStack] = useState<any[]>([]);
-  const [redoStack, setRedoStack] = useState<any[]>([]);
+  // const [undoStack, setUndoStack] = useState<any[]>([]);
+  // const [redoStack, setRedoStack] = useState<any[]>([]);
 
   // Download PDF when component mounts
   useEffect(() => {
@@ -40,27 +39,27 @@ export default function Editor() {
     }
   }, [pdfBlob]);
 
-  const handleUndo = () => {
-    if (undoStack.length === 0) return;
-    
-    const lastOperation = undoStack[undoStack.length - 1];
-    setRedoStack([...redoStack, lastOperation]);
-    setUndoStack(undoStack.slice(0, -1));
-    
-    // TODO: Implement actual undo logic with backend
-    console.log('Undo:', lastOperation);
-  };
+  // const handleUndo = () => {
+  //   if (undoStack.length === 0) return;
 
-  const handleRedo = () => {
-    if (redoStack.length === 0) return;
-    
-    const lastRedo = redoStack[redoStack.length - 1];
-    setUndoStack([...undoStack, lastRedo]);
-    setRedoStack(redoStack.slice(0, -1));
-    
-    // TODO: Implement actual redo logic with backend
-    console.log('Redo:', lastRedo);
-  };
+  //   const lastOperation = undoStack[undoStack.length - 1];
+  //   setRedoStack([...redoStack, lastOperation]);
+  //   setUndoStack(undoStack.slice(0, -1));
+
+  //   // TODO: Implement actual undo logic with backend
+  //   console.log('Undo:', lastOperation);
+  // };
+
+  // const handleRedo = () => {
+  //   if (redoStack.length === 0) return;
+
+  //   const lastRedo = redoStack[redoStack.length - 1];
+  //   setUndoStack([...undoStack, lastRedo]);
+  //   setRedoStack(redoStack.slice(0, -1));
+
+  //   // TODO: Implement actual redo logic with backend
+  //   console.log('Redo:', lastRedo);
+  // };
 
   const handleImageSelect = (imageData: {
     id: string;
@@ -69,6 +68,10 @@ export default function Editor() {
     height: number;
   }) => {
     setSelectedImage(imageData);
+  };
+
+  const handleImageAdded = () => {
+    setSelectedImage(null);
   };
 
   return (
@@ -81,15 +84,7 @@ export default function Editor() {
       </Box>
 
       {/* Toolbar */}
-      <Toolbar
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        canUndo={undoStack.length > 0}
-        canRedo={redoStack.length > 0}
-      />
-
-      {/* Page Navigator */}
-      <PageNavigator />
+      <Toolbar/>
 
       {/* Main Content - Using Grid2 for MUI v7 */}
       <Grid container spacing={2}>
@@ -101,7 +96,7 @@ export default function Editor() {
         {/* Center - PDF Canvas */}
         <Grid size={{ xs: 12, md: 9 }}>
           {pdfUrl ? (
-            <PDFCanvas pdfUrl={pdfUrl} selectedImage={selectedImage} />
+            <PDFCanvas pdfUrl={pdfUrl} selectedImage={selectedImage} onImageAdded={handleImageAdded} />
           ) : (
             <Box
               sx={{

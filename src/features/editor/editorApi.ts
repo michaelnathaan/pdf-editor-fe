@@ -158,9 +158,9 @@ export const editorAPI = createApi({
     }),
 
     // Download edited PDF
-    downloadEditedPDF: builder.query<Blob, { sessionId: string; sessionToken: string }>({
-      query: ({ sessionId, sessionToken }) => ({
-        url: `/sessions/${sessionId}/download?session_token=${sessionToken}`,
+    downloadEditedPDF: builder.query<Blob, { fileId: string; sessionId: string; sessionToken: string }>({
+      query: ({ fileId, sessionId, sessionToken }) => ({
+        url: `/files/${fileId}/sessions/${sessionId}/download?session_token=${sessionToken}`,
         responseHandler: (response) => response.blob(),
       }),
     }),
