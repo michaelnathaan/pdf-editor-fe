@@ -1,18 +1,25 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type {
-    FileUploadResponse,
-    SessionCreateResponse,
-    ImageUploadResponse,
-    OperationResponse,
-    OperationData,
-    OperationType,
+  FileUploadResponse,
+  SessionCreateResponse,
+  ImageUploadResponse,
+  OperationResponse,
+  OperationData,
+  OperationType,
 } from '../../types';
 
-const API_KEY = 'ANpJbVcp8H'; // TODO: Move to env variable
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_KEY = import.meta.env.VITE_API_KEY;
 
 export const editorAPI = createApi({
   reducerPath: 'editorAPI',
-  baseQuery: fetchBaseQuery({ baseUrl: 'http://localhost:8000/api/v1' }),
+  baseQuery: fetchBaseQuery({
+    baseUrl: API_BASE_URL,
+    prepareHeaders: (headers) => {
+      headers.set('x-api-key', API_KEY); // ✅ attach API key
+      return headers;
+    },
+  }),
   tagTypes: ['File', 'Session', 'Operations', 'Images'],
   endpoints: (builder) => ({
     // Upload PDF file
@@ -158,9 +165,9 @@ export const editorAPI = createApi({
     }),
 
     // Download edited PDF
-    downloadEditedPDF: builder.query<Blob, { fileId: string; sessionId: string; sessionToken: string }>({
-      query: ({ fileId, sessionId, sessionToken }) => ({
-        url: `/files/${fileId}/sessions/${sessionId}/download?session_token=${sessionToken}`,
+    downloadEditedPDF: builder.query<Blob, { sessionId: string; sessionToken: string }>({
+      query: ({ sessionId, sessionToken }) => ({
+        url: `/sessions/${sessionId}/download?session_token=${sessionToken}`,
         responseHandler: (response) => response.blob(),
       }),
     }),
@@ -175,8 +182,25 @@ export const editorAPI = createApi({
         responseHandler: (response) => response.blob(),
       }),
     }),
+    // Add this query
+    getSessionInfo: builder.query<{
+      id: string;
+      file_id: string;
+      file_name: string;
+      session_token: string;
+      status: string;
+      created_at: string;
+      expires_at: string;
+      permissions: { can_edit: boolean; can_download: boolean };
+      page_count: number;
+    }, { sessionId: string; sessionToken: string }>({
+      query: ({ sessionId, sessionToken }) => ({
+        url: `/sessions/${sessionId}/info?session_token=${sessionToken}`,
+      }),
+    }),
   }),
 });
+
 
 export const {
   useUploadFileMutation,
@@ -191,4 +215,5 @@ export const {
   useCommitSessionMutation,
   useLazyDownloadEditedPDFQuery,
   useLazyDownloadOriginalPDFQuery,
+  useGetSessionInfoQuery
 } = editorAPI;

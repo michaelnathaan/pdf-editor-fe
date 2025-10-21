@@ -24,10 +24,6 @@ const editorSlice = createSlice({
       state.fileName = action.payload.fileName;
       state.pageCount = action.payload.pageCount;
     },
-    setSession: (state, action: PayloadAction<{ sessionId: string; sessionToken: string }>) => {
-      state.sessionId = action.payload.sessionId;
-      state.sessionToken = action.payload.sessionToken;
-    },
     setCurrentPage: (state, action: PayloadAction<number>) => {
       state.currentPage = action.payload;
     },
@@ -65,12 +61,27 @@ const editorSlice = createSlice({
     resetEditor: () => {
       return initialState;
     },
+    setSession: (state, action: PayloadAction<{
+      sessionId: string;
+      sessionToken: string;
+    }>) => {
+      state.sessionId = action.payload.sessionId;
+      state.sessionToken = action.payload.sessionToken;
+    },
+    setFileInfo: (state, action: PayloadAction<{
+      fileId: string;
+      fileName: string;
+      pageCount: number
+    }>) => {
+      state.fileId = action.payload.fileId;
+      state.fileName = action.payload.fileName;
+      state.pageCount = action.payload.pageCount;
+    },
   },
 });
 
 export const {
   setFile,
-  setSession,
   setCurrentPage,
   setZoom,
   addImage,
@@ -82,6 +93,8 @@ export const {
   setLoading,
   setError,
   resetEditor,
+  setSession,
+  setFileInfo
 } = editorSlice.actions;
 
 export default editorSlice.reducer;

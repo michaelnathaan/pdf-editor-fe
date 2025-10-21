@@ -1,12 +1,9 @@
 import { Box, Container, Paper, Typography } from '@mui/material';
-import { useSelector } from 'react-redux';
-import type { RootState } from './store/store';
+import { Routes, Route } from 'react-router-dom';
 import FileUploader from './components/FileUploader';
-import Editor from './components/Editor';
+import EditorPage from './pages/EditorPage';
 
 function App() {
-  const { fileId, sessionId } = useSelector((state: RootState) => state.editor);
-
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', py: 3 }}>
       <Container maxWidth="xl">
@@ -19,11 +16,10 @@ function App() {
           </Typography>
         </Paper>
 
-        {!fileId || !sessionId ? (
-          <FileUploader />
-        ) : (
-          <Editor />
-        )}
+        <Routes>
+          <Route path="/" element={<FileUploader />} />
+          <Route path="/edit/:sessionId" element={<EditorPage />} />
+        </Routes>
       </Container>
     </Box>
   );

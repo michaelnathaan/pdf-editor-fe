@@ -49,10 +49,13 @@ export default function FileUploader() {
         sessionToken: sessionResponse.session_token,
       }));
 
+      window.open(sessionResponse.editor_url, "_blank");
+
     } catch (err: any) {
       console.error('Upload error:', err);
       setError(err?.data?.detail || 'Failed to upload file. Please try again.');
     }
+
   }, [uploadFile, createSession, dispatch]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -86,7 +89,7 @@ export default function FileUploader() {
         }}
       >
         <input {...getInputProps()} />
-        
+
         {isLoading ? (
           <Box>
             <CircularProgress size={60} sx={{ mb: 2 }} />

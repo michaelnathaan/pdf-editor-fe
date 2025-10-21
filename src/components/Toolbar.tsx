@@ -24,7 +24,7 @@ import {
 } from '@mui/icons-material';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState } from '../store/store';
-import { setZoom, clearOperations, setCurrentPage } from '../features/editor/editorSlice';
+import { clearOperations, setCurrentPage } from '../features/editor/editorSlice';
 import {
   useCommitSessionMutation,
   useLazyDownloadEditedPDFQuery,
@@ -40,7 +40,7 @@ interface ToolbarProps {
 
 export default function Toolbar({ }: ToolbarProps) {
   const dispatch = useDispatch();
-  const { zoom, fileId, sessionId, sessionToken, fileName } = useSelector(
+  const { fileId, sessionId, sessionToken, fileName } = useSelector(
     (state: RootState) => state.editor
   );
 
@@ -106,7 +106,7 @@ export default function Toolbar({ }: ToolbarProps) {
     try {
       if (fileId) {
         await commitSession({ fileId, sessionId, sessionToken }).unwrap();
-        const result = await downloadPDF({ fileId, sessionId, sessionToken }).unwrap();
+        const result = await downloadPDF({ sessionId, sessionToken }).unwrap();
         const url = window.URL.createObjectURL(result);
         const a = document.createElement('a');
         a.href = url;
