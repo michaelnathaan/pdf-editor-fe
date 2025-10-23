@@ -1,28 +1,33 @@
-import { defineConfig } from 'vite'
+// vite.config.ts
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const PORT = process.env.VITE_API_PORT;
+export default defineConfig(({ mode }) => {
+  // Load env variables
+  const env = loadEnv(mode, process.cwd(), '')
 
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    port: 5173,
-    // proxy: {
-    //   '/api': {
-    //     target: API_URL || 'http://localhost:8000',
-    //     changeOrigin: true,
-    //   }
-    // }
-  },
-  optimizeDeps: {
-    include: ['pdfjs-dist']
-  },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'pdfjs': ['pdfjs-dist']
+  const PORT = Number(env.VITE_API_PORT) || 5173
+
+  return {
+    plugins: [react()],
+    server: {
+      port: PORT,
+      // proxy: {
+      //   '/api': {
+      //     target: env.VITE_API_URL || 'http://localhost:8000',
+      //     changeOrigin: true,
+      //   }
+      // }
+    },
+    optimizeDeps: {
+      include: ['pdfjs-dist']
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            pdfjs: ['pdfjs-dist']
+          }
         }
       }
     }

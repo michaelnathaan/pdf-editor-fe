@@ -1,0 +1,16 @@
+version: '3.9'
+
+services:
+  pdf-editor-frontend:
+    container_name: ${FRONTEND_IMAGE_NAME}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_PORT=${VITE_API_PORT}
+    image: ${FRONTEND_IMAGE_NAME}:${VITE_IMAGE_VERSION}
+    ports:
+      - "${VITE_API_PORT}:${VITE_API_PORT}"
+    env_file:
+      - .env
+    restart: always

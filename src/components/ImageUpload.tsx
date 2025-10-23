@@ -9,9 +9,8 @@ import {
   List,
   ListItem,
   ListItemText,
-  IconButton,
 } from '@mui/material';
-import { AddPhotoAlternate, Delete } from '@mui/icons-material';
+import { AddPhotoAlternate } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store/store';
 import { useUploadImageMutation } from '../features/editor/editorApi';
@@ -90,9 +89,9 @@ export default function ImageUpload({ onImageSelect }: ImageUploadProps) {
     disabled: isLoading,
   });
 
-  const handleRemoveImage = (id: string) => {
-    setUploadedImages((prev) => prev.filter((img) => img.id !== id));
-  };
+  // const handleRemoveImage = (id: string) => {
+  //   setUploadedImages((prev) => prev.filter((img) => img.id !== id));
+  // };
 
   return (
     <Paper elevation={2} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
